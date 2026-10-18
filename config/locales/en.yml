@@ -1,31 +1,17 @@
-# Files in the config/locales directory are used for internationalization and
-# are automatically loaded by Rails. If you want to use locales other than
-# English, add the necessary files in this directory.
-#
-# To use the locales, use `I18n.t`:
-#
-#     I18n.t "hello"
-#
-# In views, this is aliased to just `t`:
-#
-#     <%= t("hello") %>
-#
-# To use a different locale, set it with `I18n.locale`:
-#
-#     I18n.locale = :es
-#
-# This would use the information in config/locales/es.yml.
-#
-# To learn more about the API, please read the Rails Internationalization guide
-# at https://guides.rubyonrails.org/i18n.html.
-#
-# Be aware that YAML interprets the following case-insensitive strings as
-# booleans: `true`, `false`, `on`, `off`, `yes`, `no`. Therefore, these strings
-# must be quoted to be interpreted as strings. For example:
-#
-#     en:
-#       "yes": yup
-#       enabled: "ON"
-
+# Error messages are for humans; API clients should branch on the error `code`,
+# which stays stable even when a joke gets rewritten. See docs/DECISIONS.md §7.
 en:
-  hello: "Hello world"
+  activerecord:
+    errors:
+      models:
+        deposit:
+          attributes:
+            amount:
+              blank: "Deposits need an amount. Even Lyndsey's cold brew budget has one."
+              not_a_number: "That's not a number. We checked twice."
+              greater_than: "Deposits go in, not out. Try a number greater than %{count}."
+              exceeds_outstanding_balance: "Whoa there, overachiever. That's more than the %{balance} left on this tradeline."
+            deposit_date:
+              blank: "Every deposit needs a real date (YYYY-MM-DD). Calendars are hard; we get it."
+            tradeline:
+              no_amount: "This tradeline has no amount on record, so there's nothing to pay down. Much like the list of reasons not to hire Lyndsey."
