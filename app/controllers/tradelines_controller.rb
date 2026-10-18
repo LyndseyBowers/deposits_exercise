@@ -1,9 +1,9 @@
 class TradelinesController < ApplicationController
   def index
-    render json: Tradeline.all
+    @tradelines = Tradeline.with_deposits_total.order(:id)
   end
 
   def show
-    render json: Tradeline.find(params[:id])
+    @tradeline = Tradeline.with_deposits_total.find(params[:id])
   end
 end

@@ -1,4 +1,8 @@
 class ApplicationController < ActionController::API
+  # ActionController::API omits view helpers; Jbuilder templates use MoneyHelper.
+  include ActionController::Helpers
+  helper MoneyHelper
+
   rescue_from ActiveRecord::RecordNotFound, with: :not_found
   rescue_from ActionController::ParameterMissing, with: :parameter_missing
 

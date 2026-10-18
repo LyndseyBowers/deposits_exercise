@@ -22,6 +22,27 @@ RSpec.describe Tradeline, type: :model do
     end
   end
 
+  describe '.with_deposits_total' do
+    it 'preloads the same balance that is computed on demand' do
+      FactoryBot.create :deposit, tradeline: tradeline, amount: 25.50
+      empty = FactoryBot.create :tradeline, amount: 10
+
+      loaded = Tradeline.with_deposits_total.where(id: [tradeline.id, empty.id]).index_by(&:id)
+
+      expect(loaded[tradeline.id].outstanding_balance).to eq(BigDecimal('74.50'))
+      expect(loaded[empty.id].outstanding_balance).to eq(10)
+    end
+
+    it 'never lets a stale preloaded total leak into the overpayment check' do
+      stale = Tradeline.with_deposits_total.find(tradeline.id) # preloads a total of 0
+      FactoryBot.create :deposit, tradeline: tradeline, amount: 90
+
+      deposit = stale.create_deposit(amount: 20, deposit_date: Date.current)
+
+      expect(deposit.errors.of_kind?(:amount, :exceeds_outstanding_balance)).to be(true)
+    end
+  end
+
   describe '#create_deposit' do
     it 'creates a valid deposit' do
       deposit = tradeline.create_deposit(amount: 40, deposit_date: Date.current)
