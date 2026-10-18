@@ -60,6 +60,7 @@ RSpec.describe TradelinesController, type: :controller do
       it 'responds with a 404' do
         get :show, params: { id: 1000 }
         expect(response).to have_http_status(:not_found)
+        expect(json['errors']).to contain_exactly(a_hash_including('code' => 'not_found'))
       end
     end
   end

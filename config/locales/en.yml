@@ -15,3 +15,7 @@ en:
               blank: "Every deposit needs a real date (YYYY-MM-DD). Calendars are hard; we get it."
             tradeline:
               no_amount: "This tradeline has no amount on record, so there's nothing to pay down. Much like the list of reasons not to hire Lyndsey."
+
+  api_errors:
+    not_found: "Not found. Like Lyndsey's next job, unless you're reading this, Beyond Finance."
+    parameter_missing: "No deposit to be found in that request. Send an amount and a deposit_date and we'll take it from there."
