@@ -1,20 +1,21 @@
 require 'rails_helper'
 
-RSpec.describe TradelinesController, type: :controller do
-  # Controller specs skip view rendering and the router's JSON default; both are needed for Jbuilder output.
-  render_views
+# Request specs exercise the full stack (router, middleware, Jbuilder views) the way a client would.
+# These replace the starter repo's controller specs, which bypassed the router and view rendering.
+RSpec.describe 'Tradelines', type: :request do
+  # A method, not let: the journey spec makes several requests and needs each response parsed fresh.
+  def json = JSON.parse(response.body)
 
-  let(:json) { JSON.parse(response.body) }
-
-  describe '#index' do
-    it 'responds with a 200' do
-      get :index, format: :json
+  describe 'GET /tradelines' do
+    it 'responds with a 200 and JSON, even without an Accept header' do
+      get '/tradelines'
 
       expect(response).to have_http_status(:ok)
+      expect(response.media_type).to eq('application/json')
     end
 
     it 'returns an empty array when there are no tradelines' do
-      get :index, format: :json
+      get '/tradelines'
 
       expect(json).to eq([])
     end
@@ -23,7 +24,7 @@ RSpec.describe TradelinesController, type: :controller do
       FactoryBot.create :tradeline, name: 'Card A'
       FactoryBot.create :tradeline, name: 'Card B', amount: 100
 
-      get :index, format: :json
+      get '/tradelines'
 
       expect(json.map { |t| t['name'] }).to contain_exactly('Card A', 'Card B')
     end
@@ -33,7 +34,7 @@ RSpec.describe TradelinesController, type: :controller do
       b = FactoryBot.create :tradeline, amount: 50
       FactoryBot.create :deposit, tradeline: a, amount: 30
 
-      get :index, format: :json
+      get '/tradelines'
 
       balances = json.to_h { |t| [t['id'], t['outstanding_balance']] }
       expect(balances).to eq(a.id => '70.00', b.id => '50.00')
@@ -47,30 +48,31 @@ RSpec.describe TradelinesController, type: :controller do
 
       queries = []
       callback = ->(*, payload) { queries << payload[:sql] unless payload[:name] == 'SCHEMA' }
-      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { get :index, format: :json }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { get '/tradelines' }
 
       expect(queries.size).to eq(1)
     end
   end
 
-  describe '#show' do
+  describe 'GET /tradelines/:id' do
     let(:tradeline) { FactoryBot.create :tradeline }
 
     it 'responds with a 200' do
-      get :show, params: { id: tradeline.id }, format: :json
+      get "/tradelines/#{tradeline.id}"
+
       expect(response).to have_http_status(:ok)
     end
 
     # Pins down the JSON contract so changes to it are deliberate.
-    it 'returns the tradeline attributes' do
-      get :show, params: { id: tradeline.id }, format: :json
+    it 'returns exactly the documented fields' do
+      get "/tradelines/#{tradeline.id}"
 
       expect(json.keys).to contain_exactly('id', 'name', 'amount', 'outstanding_balance', 'created_at', 'updated_at')
       expect(json).to include('id' => tradeline.id, 'name' => 'Some Credit Card')
     end
 
     it 'serializes amount as an exact decimal string' do
-      get :show, params: { id: tradeline.id }, format: :json
+      get "/tradelines/#{tradeline.id}"
 
       expect(json['amount']).to eq('3223.54')
     end
@@ -78,7 +80,7 @@ RSpec.describe TradelinesController, type: :controller do
     it 'always formats money with two decimals' do
       tradeline.update!(amount: 18_500)
 
-      get :show, params: { id: tradeline.id }, format: :json
+      get "/tradelines/#{tradeline.id}"
 
       expect(json).to include('amount' => '18500.00', 'outstanding_balance' => '18500.00')
     end
@@ -87,7 +89,7 @@ RSpec.describe TradelinesController, type: :controller do
       FactoryBot.create :deposit, tradeline: tradeline, amount: 200, deposit_date: Date.current - 7
       FactoryBot.create :deposit, tradeline: tradeline, amount: 404, deposit_date: Date.current + 14
 
-      get :show, params: { id: tradeline.id }, format: :json
+      get "/tradelines/#{tradeline.id}"
 
       expect(json['outstanding_balance']).to eq('2619.54')
     end
@@ -95,17 +97,40 @@ RSpec.describe TradelinesController, type: :controller do
     it 'returns a null amount and balance when the tradeline has none' do
       tradeline.update!(amount: nil)
 
-      get :show, params: { id: tradeline.id }, format: :json
+      get "/tradelines/#{tradeline.id}"
 
       expect(json).to include('amount' => nil, 'outstanding_balance' => nil)
     end
 
-    context 'if the loan is not found' do
-      it 'responds with a 404' do
-        get :show, params: { id: 1000 }, format: :json
-        expect(response).to have_http_status(:not_found)
-        expect(json['errors']).to contain_exactly(a_hash_including('code' => 'not_found'))
-      end
+    it 'responds with a 404 when the tradeline is not found' do
+      get '/tradelines/1000'
+
+      expect(response).to have_http_status(:not_found)
+      expect(json['errors']).to contain_exactly(a_hash_including('code' => 'not_found'))
     end
+  end
+
+  it 'reflects deposits in the balance until it is paid down, then rejects more' do
+    tradeline = FactoryBot.create :tradeline, name: 'Pre-Beyond Finance Credit Card', amount: 100
+    deposit = ->(amount) { post "/tradelines/#{tradeline.id}/deposits", params: { deposit: { amount: amount, deposit_date: '2026-12-01' } }, as: :json }
+
+    deposit.call(60)
+    expect(response).to have_http_status(:created)
+
+    get "/tradelines/#{tradeline.id}"
+    expect(json['outstanding_balance']).to eq('40.00')
+
+    deposit.call(40)
+    expect(response).to have_http_status(:created)
+
+    get '/tradelines'
+    expect(json.first['outstanding_balance']).to eq('0.00')
+
+    deposit.call(0.01)
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(json['errors'].first['code']).to eq('exceeds_outstanding_balance')
+
+    get "/tradelines/#{tradeline.id}/deposits"
+    expect(json.map { |d| d['amount'] }).to eq(%w[60.00 40.00])
   end
 end

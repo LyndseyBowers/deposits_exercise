@@ -51,6 +51,13 @@ RSpec.describe 'Deposits', type: :request do
       )
     end
 
+    # Pins down the JSON contract so changes to it are deliberate.
+    it 'returns exactly the documented fields' do
+      get "/tradelines/#{tradeline.id}/deposits/#{deposit.id}"
+
+      expect(json.keys).to contain_exactly('id', 'tradeline_id', 'amount', 'deposit_date', 'created_at', 'updated_at')
+    end
+
     it "returns 404 for another tradeline's deposit" do
       other = FactoryBot.create :deposit
 
