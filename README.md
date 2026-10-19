@@ -33,3 +33,74 @@ Please do not fork the repo; if forked accidentally, please delete the fork. For
 
 * Cloning the repository and then uploading it under your Github account for review.
 * Zipping up the directory. 
+
+---
+
+# Submission Notes (Lyndsey)
+
+Everything above this line is the original exercise, unchanged.
+
+## Setup
+
+Requires Ruby 3.3.0 and **PostgreSQL**. This submission switches from SQLite for real row-level locking; see [`docs/DECISIONS.md`](docs/DECISIONS.md) §3.
+
+```sh
+bundle install
+bin/rails db:setup    # creates dev + test databases, loads the schema, seeds sample data
+bundle exec rspec
+bin/rails server
+```
+
+Connects over the local socket as your OS user. Point `DATABASE_URL` elsewhere if needed.
+
+## Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/tradelines` | All tradelines, each with `outstanding_balance` |
+| `GET` | `/tradelines/:id` | One tradeline, with `outstanding_balance` |
+| `GET` | `/tradelines/:tradeline_id/deposits` | A tradeline's deposits, ordered by date |
+| `GET` | `/tradelines/:tradeline_id/deposits/:id` | One deposit |
+| `POST` | `/tradelines/:tradeline_id/deposits` | Create a deposit: `{ "amount": "40.50", "deposit_date": "2026-12-01" }` |
+
+Money is returned as two-decimal strings (`"2619.54"`), so it stays exact. The outstanding balance subtracts *all* deposits, including future-dated ones.
+
+## Try it
+
+With a fresh `db:setup`, the seeded tradelines have ids 1–6.
+
+```sh
+curl localhost:3000/tradelines
+curl localhost:3000/tradelines/1
+curl localhost:3000/tradelines/1/deposits
+
+# create a deposit
+curl -X POST localhost:3000/tradelines/1/deposits \
+  -H 'Content-Type: application/json' \
+  -d '{"amount": "25.00", "deposit_date": "2026-12-01"}'
+
+# try to overpay
+curl -X POST localhost:3000/tradelines/1/deposits \
+  -H 'Content-Type: application/json' \
+  -d '{"amount": "999999", "deposit_date": "2026-12-01"}'
+```
+
+## Errors
+
+Every error response has the same shape. Clients branch on `code`; `message` is for humans.
+
+```json
+{ "errors": [{ "attribute": "amount", "code": "exceeds_outstanding_balance",
+               "message": "Whoa there, overachiever. That's more than the 2619.54 left on this tradeline." }] }
+```
+
+Validation errors are `422`, unknown records `404`, missing params `400`.
+
+## Design decisions
+
+[`docs/DECISIONS.md`](docs/DECISIONS.md) records assumptions, each decision, and the alternatives I rejected. Highlights:
+the balance is computed on read, deposit creation takes a row lock so concurrent requests can't overpay, and the tradeline index loads all balances in one query.
+
+## About the seed data
+
+Each seeded tradeline covers a balance edge case (typical, zero, smallest payable, max precision, `nil`). The names are a cover letter in disguise. Try `curl localhost:3000/tradelines/6`.
